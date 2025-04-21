@@ -1,0 +1,660 @@
+----------------------------assignment 1 
+import time
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+from pyspark.ml.feature import VectorAssembler, StandardScaler, PCA
+from pyspark.ml.clustering import KMeans
+
+# Start Spark Session
+spark = SparkSession.builder.appName("IrisAnalysis").getOrCreate()
+
+# Load dataset
+start_time_spark = time.time()
+file_path = "Iris.csv"  # Make sure this path is correct
+data = spark.read.csv(file_path, header=True, inferSchema=True)
+
+# Select relevant features
+features = data.select(col("SepalLengthCm"), col("SepalWidthCm"), col("PetalLengthCm"))
+features = features.na.fill({"SepalLengthCm": 0, "SepalWidthCm": 0, "PetalLengthCm": 0})
+
+# Vectorize features
+assembler = VectorAssembler(
+    inputCols=["SepalLengthCm", "SepalWidthCm", "PetalLengthCm"],
+    outputCol="features"
+)
+feature_vector = assembler.transform(features).select("features")
+
+# Standard Scaling
+scaler = StandardScaler(inputCol="features", outputCol="scaled_features", withStd=True, withMean=True)
+scaler_model = scaler.fit(feature_vector)
+scaled_features = scaler_model.transform(feature_vector)
+
+# PCA Analysis Function
+def pca_analysis_spark():
+    pca = PCA(k=2, inputCol="scaled_features", outputCol="pca_features")
+    pca_model = pca.fit(scaled_features)
+    pca_result = pca_model.transform(scaled_features).select("pca_features")
+
+    print("\nPCA Result (First 10 rows):")
+    pca_result.show(10, truncate=False)
+# Convert PySpark DataFrame to Pandas for Visualization
+    pca_pd = pca_result.toPandas()
+    pca_pd[['PC1', 'PC2']] = pca_pd['pca_features'].apply(lambda x: pd.Series(x.toArray()))
+
+    # Plot PCA results
+    plt.figure(figsize=(8, 5))
+    sns.scatterplot(x=pca_pd['PC1'], y=pca_pd['PC2'], color='blue', alpha=0.6, edgecolor='k')
+    plt.title("PCA Analysis (PySpark - Iris Dataset)")
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
+    plt.grid(True)
+    plt.show()
+
+    
+    return pca_result
+
+# Run PCA
+pca_result = pca_analysis_spark()
+
+-- Assignment 2 : 
+import time
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.clustering import KMeans
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+# Start Spark Session
+spark = SparkSession.builder.appName("CustomerSegmentation").getOrCreate()
+
+# Load dataset
+file_path = "segmentation data.csv"  # Adjust if needed
+data = spark.read.csv(file_path, header=True, inferSchema=True)
+
+# Select features
+features = data.select(
+    col("Sex"), col("Marital status"), col("Age"), col("Education"),
+    col("Income"), col("Occupation"), col("Settlement size")
+)
+
+# Handle missing values (if any)
+features = features.na.fill(0)
+
+# VectorAssembler
+assembler = VectorAssembler(
+    inputCols=["Sex", "Marital status", "Age", "Education", "Income", "Occupation", "Settlement size"],
+    outputCol="features"
+)
+feature_vector = assembler.transform(features).select("features")
+
+# Scaling
+scaler = StandardScaler(inputCol="features", outputCol="scaled_features", withStd=True, withMean=True)
+scaler_model = scaler.fit(feature_vector)
+scaled_features = scaler_model.transform(feature_vector)
+
+# KMeans Clustering
+kmeans = KMeans(featuresCol="scaled_features", k=3, seed=42)
+kmeans_model = kmeans.fit(scaled_features)
+clustered_data = kmeans_model.transform(scaled_features).select("scaled_features", "prediction")
+
+# Show result
+print("\nKMeans Cluster Labels (First 10 rows):")
+clustered_data.show(10)
+
+# Optional: Visualize cluster counts
+cluster_pd = clustered_data.toPandas()
+sns.countplot(x='prediction', data=cluster_pd, palette='viridis')
+plt.title("Customer Segmentation - Cluster Counts")
+plt.xlabel("Cluster")
+plt.ylabel("Number of Customers")
+plt.grid(True)
+plt.show()
+
+
+---- Assignment no 3 :
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, concat_ws, to_timestamp, hour, dayofmonth, month, year
+from pyspark.sql.types import DoubleType
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+import matplotlib.pyplot as plt
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("TrafficVolumePredictionEnhanced").getOrCreate()
+
+# Load dataset
+df = spark.read.csv("Traffic.csv", header=True, inferSchema=True)
+
+# Combine 'Date' and 'Time' into a proper timestamp
+df = df.withColumn("Timestamp", to_timestamp(concat_ws(" ", col("Date").cast("string"), col("Time")), "d h:mm:ss a"))
+
+# Convert relevant columns to Double
+df = df.withColumn("Total", col("Total").cast(DoubleType()))
+df = df.withColumn("CarCount", col("CarCount").cast(DoubleType()))
+df = df.withColumn("BikeCount", col("BikeCount").cast(DoubleType()))
+df = df.withColumn("BusCount", col("BusCount").cast(DoubleType()))
+df = df.withColumn("TruckCount", col("TruckCount").cast(DoubleType()))
+
+# Drop null rows
+df = df.na.drop(subset=["Total", "CarCount", "BikeCount", "BusCount", "TruckCount"])
+
+# Feature engineering: extract hour
+df = df.withColumn("Hour", hour(col("Timestamp")).cast(DoubleType()))
+
+# Assemble new feature vector
+assembler = VectorAssembler(
+    inputCols=["Hour", "CarCount", "BikeCount", "BusCount", "TruckCount"],
+    outputCol="features"
+)
+df = assembler.transform(df)
+
+# Train-test split
+train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
+
+# Train model
+lr = LinearRegression(featuresCol="features", labelCol="Total")
+model = lr.fit(train_df)
+
+# Predict
+predictions = model.transform(test_df)
+
+# Show predictions
+predictions.select("Timestamp", "Total", "prediction").show(10)
+
+# Plot
+pdf = predictions.select("Timestamp", "Total", "prediction").toPandas()
+pdf = pdf.sort_values("Timestamp")
+
+plt.figure(figsize=(12, 6))
+plt.plot(pdf["Timestamp"], pdf["Total"], label="Actual Total", color="blue")
+plt.plot(pdf["Timestamp"], pdf["prediction"], label="Predicted Total", color="orange", linestyle='--')
+plt.xlabel("Timestamp")
+plt.ylabel("Traffic Volume (Total)")
+plt.title("Traffic Volume Prediction vs Actual")
+plt.legend()
+plt.grid()
+plt.show()
+
+
+---assignment no 4 :
+import time
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+from pyspark.ml.feature import Tokenizer, StopWordsRemover, HashingTF, IDF
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml import Pipeline
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("SentimentAnalysis").getOrCreate()
+
+# Start execution time measurement
+start_time = time.time()
+
+# Load dataset
+data_path = "twitter.csv"  # Path to the dataset
+df = spark.read.csv(data_path, header=True, inferSchema=True)
+
+# Select required columns
+df = df.select(col("tweet"), col("label"))
+
+# Split dataset into training and testing data (80% training, 20% testing)
+train_data, test_data = df.randomSplit([0.8, 0.2], seed=42)
+
+# Define stages of the ML pipeline
+tokenizer = Tokenizer(inputCol="tweet", outputCol="words")
+remover = StopWordsRemover(inputCol="words", outputCol="filtered_words")
+hashing_tf = HashingTF(inputCol="filtered_words", outputCol="raw_features", numFeatures=10000)
+idf = IDF(inputCol="raw_features", outputCol="features")
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+# Create pipeline
+pipeline = Pipeline(stages=[tokenizer, remover, hashing_tf, idf, lr])
+
+# Train model
+model = pipeline.fit(train_data)
+
+# Make predictions
+predictions = model.transform(test_data)
+
+# End execution time measurement
+end_time = time.time()
+execution_time = end_time - start_time
+print(f"Execution Time: {execution_time:.2f} seconds")
+
+# Show predictions
+predictions.select("tweet", "prediction").show(10)
+
+# Stop Spark session
+spark.stop()
+
+
+
+----assignment no 5 :
+import time
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml import Pipeline
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("StockPricePrediction").getOrCreate()
+
+# Start execution time measurement
+start_time = time.time()
+
+# Load dataset
+data_path = "stock_data.csv"  # Replace with your dataset path
+df = spark.read.csv(data_path, header=True, inferSchema=True)
+
+# Show the first few rows to inspect
+df.show(5)
+
+# Select and prepare the necessary columns
+# We are predicting the "Close" price, so we'll use "Open", "High", "Low", and "Volume" as features
+# Create a feature vector from the other columns
+assembler = VectorAssembler(inputCols=["Open", "High", "Low", "Volume"], outputCol="features")
+
+# Split dataset into training and testing data (80% training, 20% testing)
+train_data, test_data = df.randomSplit([0.8, 0.2], seed=42)
+
+# Initialize Linear Regression model
+lr = LinearRegression(featuresCol="features", labelCol="Close")
+
+# Create a pipeline with the assembler and the regression model
+pipeline = Pipeline(stages=[assembler, lr])
+
+# Train the model
+model = pipeline.fit(train_data)
+
+# Make predictions on the test dataset
+predictions = model.transform(test_data)
+
+# Show predictions with true labels (first 10 rows)
+predictions.select("Date", "Close", "prediction").show(10)
+
+# End execution time measurement
+end_time = time.time()
+execution_time = end_time - start_time
+print(f"Execution Time: {execution_time:.2f} seconds")
+
+# Evaluate the model (RMSE and R-squared)
+lr_model = model.stages[-1]  # The LinearRegression model is the last stage in the pipeline
+rmse = lr_model.evaluate(predictions).rootMeanSquaredError
+r2 = lr_model.evaluate(predictions).r2
+
+print(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
+print(f"R-squared: {r2:.2f}")
+
+# Stop Spark session
+spark.stop()
+
+
+----assignment no 6 :
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+import plotly.express as px
+from fpdf import FPDF
+import os
+
+# 1. Skip CSV creation, since data_analytics.csv is already present
+
+# 2. Graph analytics with NetworkX
+def graph_analytics(df):
+    G = nx.from_pandas_edgelist(df, 'Customer ID', 'StockCode', ['Quantity'])
+    centrality = nx.degree_centrality(G)
+    return G, centrality
+
+# 3. Charts & summary statistics
+def generate_charts(df):
+    os.makedirs("charts", exist_ok=True)
+    os.makedirs("reports", exist_ok=True)
+
+    df['Total'] = df['Quantity'] * df['Price']
+    customer_group = df.groupby('Customer ID')['Total'].sum().reset_index()
+    fig = px.bar(customer_group, x='Customer ID', y='Total', title='Total Purchase by Customer')
+    fig.write_html("charts/customer_bar.html")
+
+    cross_tab = pd.crosstab(df['Customer ID'], df['StockCode'], values=df['Total'], aggfunc='sum', dropna=False)
+    cross_tab.to_csv("reports/crosstab.csv")
+
+    stats = df['Total'].describe()
+    stats.to_csv("reports/statistics.csv")
+
+    return customer_group, stats, cross_tab
+
+# 4. Filter, sort, group
+def filter_sort_group(df):
+    df['Total'] = df['Quantity'] * df['Price']
+    df_filtered = df[df['Total'] > 100]
+    df_sorted = df_filtered.sort_values(by='Total', ascending=False)
+    df_grouped = df_sorted.groupby('Customer ID').agg({'Total': ['sum', 'mean']}).reset_index()
+    return df_grouped
+
+# 5. Add summary line
+def add_summary_line(df):
+    df['Total'] = df['Quantity'] * df['Price']
+    total = df['Total'].sum()
+    return f"Total Sales Value: ₹{total:.2f}"
+
+# 6. Export reports
+def export_reports(df, summary):
+    df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in df.columns.values]
+
+    df.to_excel("reports/report.xlsx", index=False)
+    df.to_csv("reports/report.csv", index=False)
+    df.to_xml("reports/report.xml", index=False)
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Sales Report", ln=True, align='C')
+    pdf.ln(10)
+
+    for _, row in df.iterrows():
+        pdf.cell(200, 10, txt=str(row.to_dict()), ln=True)
+        pdf.ln(5)
+
+    pdf.set_font("Arial", style='B', size=12)
+    pdf.cell(200, 10, txt=summary.encode('utf-8').decode('latin-1'), ln=True)
+    pdf.output("reports/report.pdf")
+
+# 7. Run everything
+def run_report():
+    df = pd.read_csv("data_analytics.csv", encoding='latin1')
+    G, centrality = graph_analytics(df)
+    customer_group, stats, crosstab = generate_charts(df)
+    processed_data = filter_sort_group(df)
+    summary = add_summary_line(df)
+    export_reports(processed_data, summary)
+    print("✅ Reports generated! Check the left file browser in Colab to download.")
+
+# Run it
+run_report()
+
+
+Assignment - 7
+from pyspark import SparkContext
+
+# Initialize SparkContext
+sc = SparkContext("local", "WordCount")
+
+# Load text file into RDD
+text_rdd = sc.textFile("input.txt")
+
+# Split the text into words, and map them to (word, 1)
+words_rdd = text_rdd.flatMap(lambda line: line.split(" ")) \
+                    .map(lambda word: (word, 1))
+
+# Reduce by key (word) to count occurrences
+word_count_rdd = words_rdd.reduceByKey(lambda x, y: x + y)
+
+# Collect and print the results
+print(word_count_rdd.collect())
+
+# Stop SparkContext
+sc.stop()
+
+Assignment - 8
+from pyspark.sql import SparkSession
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("MatrixMultiplication").getOrCreate()
+sc = spark.sparkContext
+
+# Example matrices
+matrix_A = [
+    (0, 0, 4), (0, 1, 6), (0, 2, 8),
+    (1, 0, 5), (1, 1, 5), (1, 2, 4)
+]
+
+matrix_B = [
+    (0, 0, 7), (0, 1, 8),
+    (1, 0, 9), (1, 1, 10),
+    (2, 0, 11), (2, 1, 12)
+]
+
+# Convert matrices into RDDs
+rdd_A = sc.parallelize(matrix_A)  # (row, col, value)
+rdd_B = sc.parallelize(matrix_B)  # (row, col, value)
+
+# Map phase: Convert matrix entries into (key, value) pairs
+mapped_A = rdd_A.map(lambda x: (x[1], (x[0], x[2])))  # Keyed by column of A
+mapped_B = rdd_B.map(lambda x: (x[0], (x[1], x[2])))  # Keyed by row of B
+
+# Join on common key (column index of A and row index of B)
+joined = mapped_A.join(mapped_B)
+# Result: (shared_index, ((row_A, val_A), (col_B, val_B)))
+
+# Compute partial products
+partial_products = joined.map(
+    lambda x: ((x[1][0][0], x[1][1][0]), x[1][0][1] * x[1][1][1])
+)
+
+# Reduce phase: Sum partial products for each (row, col) position
+result = partial_products.reduceByKey(lambda x, y: x + y)
+
+# Collect and print results
+output = result.collect()
+for ((row, col), value) in sorted(output):
+    print(f"({row}, {col}) -> {value}")
+
+# Stop Spark session
+spark.stop()
+
+Assignment - 9
+import os
+import requests
+import pandas as pd
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, month, dayofyear, max as spark_max, when, expr
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.feature import VectorAssembler
+
+# Define the base URLs for the data
+base_url_1 = "https://www.ncei.noaa.gov/data/global-summary-of-the-day/access/{}/99495199999.csv"
+base_url_2 = "https://www.ncei.noaa.gov/data/global-summary-of-the-day/access/{}/72429793812.csv"
+
+# Define the range of years
+years = range(2021, 2023)
+
+# Base directory to save the downloaded files
+base_output_dir = "./weather_data/"
+
+# Download data for each year and station
+for year in years:
+    year_dir = os.path.join(base_output_dir, str(year))
+    os.makedirs(year_dir, exist_ok=True)
+    
+    for base_url, station_id in [(base_url_1, "99495199999"), (base_url_2, "72429793812")]:
+        url = base_url.format(year)
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            file_path = os.path.join(year_dir, f"{station_id}.csv")
+            with open(file_path, "wb") as file:
+                file.write(response.content)
+            print(f"Downloaded: {file_path}")
+        else:
+            print(f"Failed to download {url}. Status code: {response.status_code}")
+
+# Clean the data by filtering out invalid values
+base_input_dir = "./weather_data/"
+base_output_dir = "./cleaned_weather_data/"
+
+invalid_values = {
+    "MXSPD": 999.9,
+    "MAX": 9999.9,
+    "MIN": 9999.9,
+}
+
+for year in range(2021, 2023):
+    year_dir = os.path.join(base_input_dir, str(year))
+    
+    if os.path.exists(year_dir):
+        for station_id in ["99495199999", "72429793812"]:
+            file_path = os.path.join(year_dir, f"{station_id}.csv")
+            if os.path.exists(file_path):
+                df = pd.read_csv(file_path)
+                for column, invalid_value in invalid_values.items():
+                    df = df[df[column] != invalid_value]
+                
+                output_year_dir = os.path.join(base_output_dir, str(year))
+                os.makedirs(output_year_dir, exist_ok=True)
+                cleaned_file_path = os.path.join(output_year_dir, f"{station_id}.csv")
+                df.to_csv(cleaned_file_path, index=False)
+                print(f"Cleaned data saved to: {cleaned_file_path}")
+            else:
+                print(f"File not found: {file_path}")
+    else:
+        print(f"Year directory not found: {year_dir}")
+
+# Spark session setup
+spark = SparkSession.builder.appName("Weather Analysis").getOrCreate()
+
+# Question 2: Load the CSV files and display the count of each dataset.
+for year in range(2021, 2023):
+    for station_id in ["99495199999", "72429793812"]:
+        file_path = os.path.join(base_output_dir, str(year), f"{station_id}.csv")
+        if os.path.exists(file_path):
+            df = spark.read.csv(file_path, header=True, inferSchema=True)
+            print(f"Year: {year}, Station: {station_id}, Row count: {df.count()}")
+
+# Question 6: Count missing values for 'GUST' in 2024
+base_path = "./cleaned_weather_data/2024/"
+station_codes = ['99495199999', '72429793812']
+results = []
+
+for station_code in station_codes:
+    file_path = os.path.join(base_path, f"{station_code}.csv")
+    if os.path.exists(file_path):
+        df = spark.read.csv(file_path, header=True, inferSchema=True)
+        total_count = df.count()
+        missing_count = df.filter(df.GUST == 999.9).count()
+        
+        missing_percentage = (missing_count / total_count) * 100 if total_count > 0 else 0.0
+        results.append((station_code, missing_percentage))
+
+for station_code, missing_percentage in results:
+    print(f"Station Code: {station_code}, Missing GUST Percentage in 2024: {missing_percentage:.2f}%")
+
+# Question 7: Mean, median, mode, and standard deviation for Cincinnati temperature in 2020
+df = spark.read.csv("./cleaned_weather_data/2021/72429793812.csv", header=True, inferSchema=True)
+df_cincinnati = df.withColumn("MONTH", month(col("DATE")))
+result = df_cincinnati.groupBy("MONTH").agg(
+    expr("mean(TEMP)").alias("Mean"),
+    expr("percentile_approx(TEMP, 0.5)").alias("Median"),
+    expr("mode(TEMP)").alias("Mode"),
+    expr("stddev(TEMP)").alias("Standard Deviation")
+)
+
+result.orderBy("MONTH").show()
+
+# Question 8: Top 10 lowest Wind Chill days in Cincinnati 2017
+df = spark.read.csv("./cleaned_weather_data/2022/72429793812.csv", header=True, inferSchema=True)
+df_cincinnati = df.filter((col("TEMP") < 50) & (col("WDSP") > 3))
+
+df_cincinnati = df_cincinnati.withColumn(
+    "Wind Chill", 
+    35.74 + (0.6215 * col("TEMP")) - (35.75 * (col("WDSP") ** 0.16)) + (0.4275 * col("TEMP") * (col("WDSP") ** 0.16))
+)
+
+df_cincinnati = df_cincinnati.withColumn("DATE", expr("date_format(DATE, 'yyyy-MM-dd')"))
+result = df_cincinnati.select("DATE", "Wind Chill").orderBy("Wind Chill").limit(10)
+result.show()
+
+# Question 9: Count extreme weather days for Florida
+base_directory = './cleaned_weather_data/'
+file_paths = []
+for year in range(2015, 2025):
+    file_path = os.path.join(base_directory, str(year), '99495199999.csv')
+    if os.path.exists(file_path):
+        file_paths.append(file_path)
+
+df = spark.read.csv(file_paths, header=True, inferSchema=True)
+extreme_weather_count = df.filter(col("FRSHTT") != 0).count()
+print(f"Number of days with extreme weather conditions in Florida: {extreme_weather_count}")
+
+# Question 10: Predict max Temperature for Cincinnati in Nov and Dec 2024
+base_directory = './cleaned_weather_data'
+file_paths = []
+
+for year in [2022, 2023]:
+    file_path = os.path.join(base_directory, str(year), '72429793812.csv')
+    if os.path.exists(file_path):
+        file_paths.append(file_path)
+
+historical_data = spark.read.csv(file_paths, header=True, inferSchema=True)
+historical_df = historical_data.filter(
+    (col("STATION") == "72429793812") & (month("DATE").isin([11, 12]))
+)
+
+training_data = historical_df.withColumn("DAY_OF_YEAR", dayofyear("DATE"))
+assembler = VectorAssembler(inputCols=["DAY_OF_YEAR"], outputCol="features")
+train_data = assembler.transform(training_data).select("features", col("MAX").alias("label"))
+
+lr = LinearRegression()
+lr_model = lr.fit(train_data)
+
+predictions_df = spark.createDataFrame([(day,) for day in range(305, 366)], ["DAY_OF_YEAR"])
+predictions = assembler.transform(predictions_df)
+predicted_temps = lr_model.transform(predictions)
+
+max_predictions = predicted_temps.withColumn(
+    "MONTH", when(col("DAY_OF_YEAR") < 335, 11).otherwise(12)
+).groupBy("MONTH").agg(spark_max("prediction").alias("Max Predicted Temp"))
+
+max_predictions.show()
+
+# Stop the Spark session
+spark.stop()
+
+
+Assignment - 10
+from pyspark import SparkContext
+import kagglehub
+
+def parse_line(line):
+    """Parses each line of input data into (movie_id, rating)."""
+    if line.startswith("userId,movieId,rating,timestamp"):
+        return None
+    parts = line.split(",")
+    return (int(parts[1]), float(parts[2]))
+
+def main():
+    sc = SparkContext("local", "MovieRatings")
+
+    # Download dataset
+    path = kagglehub.dataset_download("rounakbanik/the-movies-dataset")
+    dataset_file = f"{path}/ratings.csv"
+
+    # Read the input data
+    input_rdd = sc.textFile(dataset_file)
+
+    # Parse and filter the data
+    mapped_rdd = input_rdd.filter(lambda line: not line.startswith("userId,movieId,rating,timestamp")) \
+                          .map(parse_line)
+
+    # Calculate average ratings for each movie
+    reduced_rdd = mapped_rdd.groupByKey().mapValues(lambda ratings: sum(ratings) / len(ratings))
+
+    # Collect results and print
+    results = reduced_rdd.collect()
+    for movie_id, avg_rating in results:
+        print(f"Movie {movie_id} has an average rating of {avg_rating:.2f}")
+
+    sc.stop()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
