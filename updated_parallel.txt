@@ -655,6 +655,70 @@ if __name__ == "__main__":
     main()
 
 
+-----bigmart sales :
+from pyspark.sql import SparkSession, Row
+from pyspark.ml.feature import StringIndexer, VectorAssembler
+from pyspark.ml.regression import LinearRegression
+
+# Step 1: Create Spark session
+spark = SparkSession.builder.appName("BigMartSalesPrediction").getOrCreate()
+
+# Step 2: Load dataset
+df = spark.read.csv("bigmart.csv", header=True, inferSchema=True)
+
+# Step 3: Handle missing values if any (optional)
+df = df.na.drop()
+
+# Step 4: StringIndexer for categorical features
+categorical_cols = ["Item_Fat_Content", "Item_Type", "Outlet_Identifier",
+                    "Outlet_Size", "Outlet_Location_Type", "Outlet_Type"]
+
+indexers = [StringIndexer(inputCol=col, outputCol=col + "_Index").fit(df) for col in categorical_cols]
+
+for indexer in indexers:
+    df = indexer.transform(df)
+
+# Step 5: VectorAssembler to create feature vector
+feature_cols = ["Item_Weight", "Item_Visibility", "Item_MRP",
+                "Item_Fat_Content_Index", "Item_Type_Index", "Outlet_Identifier_Index",
+                "Outlet_Establishment_Year", "Outlet_Size_Index",
+                "Outlet_Location_Type_Index", "Outlet_Type_Index"]
+
+assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+df = assembler.transform(df)
+
+# Step 6: Split into training and test
+train_data, test_data = df.randomSplit([0.8, 0.2], seed=42)
+
+# Step 7: Train Linear Regression model
+lr = LinearRegression(featuresCol="features", labelCol="Item_Outlet_Sales")
+lr_model = lr.fit(train_data)
+
+# Step 8: Trial input row for prediction
+trial_data = [Row(Item_Weight=10.5,
+                  Item_Visibility=0.02,
+                  Item_MRP=100.0,
+                  Item_Fat_Content="Low Fat",
+                  Item_Type="Dairy",
+                  Outlet_Identifier="OUT049",
+                  Outlet_Establishment_Year=1999,
+                  Outlet_Size="Medium",
+                  Outlet_Location_Type="Tier 1",
+                  Outlet_Type="Supermarket Type1")]
+
+new_df = spark.createDataFrame(trial_data)
+
+# Step 9: Apply same indexers to trial data
+for indexer in indexers:
+    new_df = indexer.transform(new_df)
+
+# Step 10: Assemble features for trial data
+new_df = assembler.transform(new_df)
+
+# Step 11: Predict sales for the trial product
+prediction = lr_model.transform(new_df)
+prediction.select("prediction").show()
+
 
 
 
