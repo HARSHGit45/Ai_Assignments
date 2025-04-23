@@ -1,0 +1,589 @@
+Assignment - 1
+import string
+import numpy as np
+
+# Caesar Cipher
+def caesar_cipher(text, shift, mode):
+    result = ''
+    for char in text:
+        if char.isalpha():
+            start = ord('a') if char.islower() else ord('A')
+            shifted_char = chr((ord(char) - start + shift) % 26 + start)
+        elif char.isdigit():
+            shifted_char = str((int(char) + shift) % 10)
+        else:
+            shifted_char = char
+        result += shifted_char
+    return result
+
+# Vigenere Cipher
+def vigenere_cipher(text, key, mode):
+    key_len = len(key)
+    result = ''
+    for i in range(len(text)):
+        char = text[i]
+        if char.isalpha():
+            key_char = key[i % key_len]
+            shift = ord(key_char.lower()) - ord('a')
+            if mode == 'encrypt':
+                result += chr(((ord(char.lower()) - ord('a') + shift) % 26) + ord('a'))
+            elif mode == 'decrypt':
+                result += chr(((ord(char.lower()) - ord('a') - shift) % 26) + ord('a'))
+        else:
+            result += char
+    return result
+
+# Playfair Cipher
+def prepare_text(text):
+    text = text.upper().replace('J', 'I')
+    text = ''.join(filter(str.isalpha, text))
+    return text
+
+def generate_matrix(key):
+    key = prepare_text(key)
+    alphabet = "ABCDEFGHIKLMNOPQRSTUVWXYZ"
+    matrix = []
+    for char in key:
+        if char not in matrix:
+          matrix.append(char)
+    for char in alphabet:
+        if char not in matrix:
+            matrix.append(char)
+    return [matrix[i:i+5] for i in range(0, 25, 5)]
+
+def find_position(matrix, char):
+  for i, row in enumerate(matrix):
+      for j, c in enumerate(row):
+          if c == char:
+              return i, j
+
+def playfair_cipher(text, key, mode):
+    matrix = generate_matrix(key)
+    text = prepare_text(text)
+    if len(text) % 2 != 0:
+        text += 'X'
+    result = ''
+    for i in range(0, len(text), 2):
+        a, b = text[i], text[i+1]
+        row1, col1 = find_position(matrix, a)
+        row2, col2 = find_position(matrix, b)
+
+        if row1 == row2:
+            result += matrix[row1][(col1 + (1 if mode == 'encrypt' else -1)) % 5]
+            result += matrix[row2][(col2 + (1 if mode == 'encrypt' else -1)) % 5]
+        elif col1 == col2:
+            result += matrix[(row1 + (1 if mode == 'encrypt' else -1)) % 5][col1]
+            result += matrix[(row2 + (1 if mode == 'encrypt' else -1)) % 5][col2]
+        else:
+            result += matrix[row1][col2]
+            result += matrix[row2][col1]
+    return result
+
+# Hill Cipher
+def letter_to_num(char):
+    return ord(char.upper()) - ord('A')
+
+def num_to_letter(num):
+    return chr(num % 26 + ord('A'))
+
+def hill_cipher_encrypt(plaintext, key_matrix):
+    n = len(key_matrix)
+    while len(plaintext) % n != 0:
+        plaintext += 'X'
+
+    plaintext_nums = [letter_to_num(char) for char in plaintext]
+    chunks = [plaintext_nums[i:i+n] for i in range(0, len(plaintext_nums), n)]
+    ciphertext_nums = []
+    for chunk in chunks:
+        chunk_vector = np.array(chunk).reshape(n, 1)
+        encrypted_vector = np.dot(key_matrix, chunk_vector) % 26
+        ciphertext_nums.extend(encrypted_vector.flatten().tolist())
+
+    ciphertext = ''.join([num_to_letter(num) for num in ciphertext_nums])
+    return ciphertext
+
+def hill_cipher_decrypt(ciphertext, key_matrix):
+    det = int(np.round(np.linalg.det(key_matrix)))
+    det_inv = pow(det, -1, 26)
+
+    adjugate = np.round(det_inv * np.linalg.inv(key_matrix) * np.linalg.det(key_matrix)) % 26
+    adjugate = adjugate.astype(int)
+
+    ciphertext_nums = [letter_to_num(char) for char in ciphertext]
+    n = len(key_matrix)
+    chunks = [ciphertext_nums[i:i+n] for i in range(0, len(ciphertext_nums), n)]
+    plaintext_nums = []
+    for chunk in chunks:
+        chunk_vector = np.array(chunk).reshape(n, 1)
+        decrypted_vector = np.dot(adjugate, chunk_vector) % 26
+        plaintext_nums.extend(decrypted_vector.flatten().tolist())
+
+    plaintext = ''.join([num_to_letter(num) for num in plaintext_nums])
+    return plaintext
+
+def main():
+    while True:
+        print("\n--- Cipher Menu ---")
+        print("1. Caesar Cipher")
+        print("2. Vigenere Cipher")
+        print("3. Playfair Cipher")
+        print("4. Hill Cipher")
+        print("5. Exit")
+
+        choice = input("Enter your choice (1-5): ")
+
+        if choice == '1':
+            text = input("Enter text: ")
+            shift = int(input("Enter shift value: "))
+            print("\nCaesar Cipher:")
+            encrypted_caesar = caesar_cipher(text, shift, 'encrypt')
+            decrypted_caesar = caesar_cipher(encrypted_caesar, -shift, 'encrypt')  # Decrypt using inverse shift
+            print("Encrypted:", encrypted_caesar)
+            print("Decrypted:", decrypted_caesar)
+
+        elif choice == '2':
+            text = input("Enter text: ")
+            key_vigenere = input("Enter key for Vigenere cipher: ")
+            print("\nVigenere Cipher:")
+            encrypted_vigenere = vigenere_cipher(text, key_vigenere, 'encrypt')
+            decrypted_vigenere = vigenere_cipher(encrypted_vigenere, key_vigenere, 'decrypt')
+            print("Encrypted:", encrypted_vigenere)
+            print("Decrypted:", decrypted_vigenere)
+
+        elif choice == '3':
+            text = input("Enter text: ")
+            key_playfair = input("Enter key for Playfair cipher: ")
+            print("\nPlayfair Cipher:")
+            encrypted_playfair = playfair_cipher(text, key_playfair, 'encrypt')
+            decrypted_playfair = playfair_cipher(encrypted_playfair, key_playfair, 'decrypt')
+            print("Encrypted:", encrypted_playfair)
+            print("Decrypted:", decrypted_playfair)
+
+        elif choice == '4':
+            key_matrix = np.array([
+                [6, 24, 1],
+                [13, 16, 10],
+                [20, 17, 15]
+            ])
+            plaintext = input("Enter plaintext for Hill cipher: ")
+            print("\nHill Cipher:")
+            encrypted_hill = hill_cipher_encrypt(plaintext, key_matrix)
+            decrypted_hill = hill_cipher_decrypt(encrypted_hill, key_matrix)
+            print("Encrypted:", encrypted_hill)
+            print("Decrypted:", decrypted_hill)
+
+        elif choice == '5':
+            print("Exiting...")
+            break
+
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
+
+
+Assignment - 2
+def row_column_transposition_encrypt(text, key):
+    text = ''.join(filter(str.isalnum, text)).upper()
+    num_cols = len(key)
+    num_rows = (len(text) // num_cols) + (1 if len(text) % num_cols != 0 else 0)
+    matrix = [['' for _ in range(num_cols)] for _ in range(num_rows)]
+    k = 0
+    for i in range(num_rows):
+        for j in range(num_cols):
+            if k < len(text):
+                matrix[i][j] = text[k]
+                k += 1
+
+    encrypted_text = ''.join([matrix[i][key.index(j)] for j in sorted(key)])
+    return encrypted_text
+
+def row_column_transposition_decrypt(encrypted_text, key):
+    num_cols = len(key)
+    num_rows = (len(encrypted_text) // num_cols) + (1 if len(encrypted_text) % num_cols != 0 else 0)
+    matrix = [['' for _ in range(num_cols)] for _ in range(num_rows)]
+    k = 0
+    for i in sorted(key):
+        for j in range(num_rows):
+            if k < len(encrypted_text):
+                matrix[j][key.index(i)] = encrypted_text[k]
+                k += 1
+    decrypted_text = ''.join([''.join(row) for row in matrix]).strip()
+    return decrypted_text
+
+def rail_fence_encrypt(text, key):
+    text = ''.join(filter(str.isalnum, text)).upper()
+
+    rail = ['' for _ in range(key)]
+    row, step = 0, 1
+    for char in text:
+        rail[row] += char
+        if row == 0:
+            step = 1
+        elif row == key - 1:
+            step = -1
+        row += step
+
+ =
+    encrypted_text = ''.join(rail)
+    return encrypted_text
+
+def rail_fence_decrypt(encrypted_text, key):
+    rail = ['' for _ in range(key)]
+    text_len = len(encrypted_text)
+    row, step = 0, 1
+    rail_pattern = [[None] * text_len for _ in range(key)]
+    for col in range(text_len):
+        rail_pattern[row][col] = '*'
+        if row == 0:
+            step = 1
+        elif row == key - 1:
+            step = -1
+        row += step
+    index = 0
+    for i in range(key):
+        for j in range(text_len):
+            if rail_pattern[i][j] == '*':
+                rail_pattern[i][j] = encrypted_text[index]
+                index += 1
+    decrypted_text = ''
+    row, step = 0, 1
+    for col in range(text_len):
+        decrypted_text += rail_pattern[row][col]
+        if row == 0:
+            step = 1
+        elif row == key - 1:
+            step = -1
+        row += step
+
+    return decrypted_text
+def main():
+    while True:
+        print("\n--- Cipher Menu ---")
+        print("1. Row-Column Transposition Cipher")
+        print("2. Rail Fence Transposition Cipher")
+        print("3. Exit")
+
+        choice = input("Enter your choice (1-3): ")
+
+        if choice == '1':
+            text = input("Enter text for Row-Column Transposition: ")
+            key_input = input("Enter key for Row-Column Transposition (e.g. 3124): ")
+            key = [int(x) - 1 for x in key_input]
+
+            encrypted = row_column_transposition_encrypt(text, key)
+            print(f"Encrypted: {encrypted}")
+
+            decrypted = row_column_transposition_decrypt(encrypted, key)
+            print(f"Decrypted: {decrypted}")
+
+        elif choice == '2':
+            text = input("Enter text for Rail Fence Transposition: ")
+            key = int(input("Enter number of rails: "))
+
+            encrypted = rail_fence_encrypt(text, key)
+            print(f"Encrypted: {encrypted}")
+
+            decrypted = rail_fence_decrypt(encrypted, key)
+            print(f"Decrypted: {decrypted}")
+
+        elif choice == '3':
+            print("Exiting...")
+            break
+
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
+
+Assignment - 3
+!pip install pycryptodome
+from Crypto.Cipher import DES
+from Crypto.Util.Padding import pad, unpad
+import os
+
+def generate_des_key():
+    """Generates an 8-byte (64-bit) DES key."""
+    return os.urandom(8)
+
+def encrypt_file(input_filename, output_filename, key):
+    """Encrypts a file using DES in CBC mode."""
+    cipher = DES.new(key, DES.MODE_CBC)
+    iv = cipher.iv  # Get the initialization vector
+
+    with open(input_filename, 'rb') as f:
+        plaintext = f.read()
+
+    padded_text = pad(plaintext, DES.block_size)
+    ciphertext = cipher.encrypt(padded_text)
+
+    with open(output_filename, 'wb') as f:
+        f.write(iv + ciphertext)  # Store IV at the beginning of the file
+
+    print(f"Encryption complete. Encrypted file saved as '{output_filename}'")
+
+def decrypt_file(input_filename, output_filename, key):
+    """Decrypts a DES-encrypted file."""
+    with open(input_filename, 'rb') as f:
+        iv = f.read(8)  # Extract IV from the beginning
+        ciphertext = f.read()
+
+    cipher = DES.new(key, DES.MODE_CBC, iv)
+    decrypted_text = unpad(cipher.decrypt(ciphertext), DES.block_size)
+
+    with open(output_filename, 'wb') as f:
+        f.write(decrypted_text)
+
+    print(f"Decryption complete. Decrypted file saved as '{output_filename}'")
+
+# Example usage
+if __name__ == "__main__":
+    key = generate_des_key()  # Generate a random DES key
+
+    encrypt_file("input.txt", "encrypted.bin", key)
+    decrypt_file("encrypted.bin", "decrypted.txt", key)
+with open("encrypted.bin","rb") as f:
+  data = f.read(100)
+  print(data)
+
+Assignment - 4
+!pip install pycryptodome
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+
+# AES block size is 16 bytes
+BLOCK_SIZE = 16
+
+def encrypt_file(input_file, output_file, key):
+    iv = get_random_bytes(BLOCK_SIZE)  # Generate a random IV
+    cipher = AES.new(key, AES.MODE_CBC, iv)  # Create AES cipher
+
+    with open(input_file, "rb") as f:
+        plaintext = f.read()
+
+    padded_data = pad(plaintext, BLOCK_SIZE)  # Ensure multiple of 16 bytes
+    ciphertext = cipher.encrypt(padded_data)  # Encrypt data
+
+    with open(output_file, "wb") as f:
+        f.write(iv + ciphertext)  # Store IV + encrypted data
+
+    print(f"Encryption complete. Encrypted file saved as '{output_file}'.")
+
+def decrypt_file(input_file, output_file, key):
+    with open(input_file, "rb") as f:
+        iv = f.read(BLOCK_SIZE)  # Extract IV
+        ciphertext = f.read()
+
+    cipher = AES.new(key, AES.MODE_CBC, iv)  # Create AES cipher
+    decrypted_data = unpad(cipher.decrypt(ciphertext), BLOCK_SIZE)  # Decrypt and remove padding
+
+    with open(output_file, "wb") as f:
+        f.write(decrypted_data)
+
+    print(f"Decryption complete. Decrypted file saved as '{output_file}'.")
+
+# Generate a 16-byte AES key (store securely!)
+key = get_random_bytes(16)
+
+# Encrypt and Decrypt Example
+encrypt_file("input.txt", "encrypted_aes.bin", key)
+decrypt_file("encrypted_aes.bin", "decrypted_aes.txt", key)
+with open("encrypted_aes.bin","rb") as f:
+  data = f.read(100)
+  print(data)
+
+Assignment - 5
+def power(base, expo, m):
+    """Performs modular exponentiation."""
+    res = 1
+    base = base % m
+    while expo > 0:
+        if expo & 1:
+            res = (res * base) % m
+        base = (base * base) % m
+        expo = expo // 2
+    return res
+
+# Function to find modular inverse of e modulo phi(n)
+# Here we are calculating phi(n) using Hit and Trial Method
+# but we can optimize it using Extended Euclidean Algorithm
+def modInverse(e, phi):
+    for d in range(2, phi):
+        if (e * d) % phi == 1:
+            return d
+    return -1
+
+# RSA Key Generation
+def generateKeys():
+    p = 7919  # Prime number 1
+    q = 1009  # Prime number 2
+
+    n = p * q
+    phi = (p - 1) * (q - 1)
+
+    # Choose e, where 1 < e < phi(n) and gcd(e, phi(n)) == 1
+    e = 0
+    for e in range(2, phi):
+        if gcd(e, phi) == 1:
+            break
+
+    # Compute d such that e * d ≡ 1 (mod phi(n))
+    d = modInverse(e, phi)
+
+    return e, d, n
+
+# Function to calculate gcd
+def gcd(a, b):
+    while b != 0:
+        a, b = b, a % b
+    return a
+
+# Encrypt message using public key (e, n)
+def encrypt(m, e, n):
+    return power(m, e, n)
+
+# Decrypt message using private key (d, n)
+def decrypt(c, d, n):
+    return power(c, d, n)
+
+# Main menu-driven program
+def menu():
+    while True:
+        print("\nRSA Encryption/Decryption Menu")
+        print("1. Generate RSA Keys")
+        print("2. Encrypt a Message")
+        print("3. Decrypt a Message")
+        print("4. Exit")
+
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            # Key Generation
+            e, d, n = generateKeys()
+            print(f"\nPublic Key (e, n): ({e}, {n})")
+            print(f"Private Key (d, n): ({d}, {n})")
+
+        elif choice == '2':
+            # Encrypt a Message
+            try:
+                M = int(input("\nEnter the message to encrypt (as an integer): "))
+                e = int(input("Enter public key 'e': "))
+                n = int(input("Enter public key 'n': "))
+
+                C = encrypt(M, e, n)
+                print(f"\nEncrypted Message: {C}")
+            except ValueError:
+                print("\nInvalid input. Please enter integers for the message and keys.")
+
+        elif choice == '3':
+            # Decrypt a Message
+            try:
+                C = int(input("\nEnter the encrypted message (ciphertext): "))
+                d = int(input("Enter private key 'd': "))
+                n = int(input("Enter private key 'n': "))
+
+                decrypted = decrypt(C, d, n)
+                print(f"\nDecrypted Message: {decrypted}")
+            except ValueError:
+                print("\nInvalid input. Please enter integers for the ciphertext and keys.")
+
+        elif choice == '4':
+            # Exit the program
+            print("\nExiting the program...")
+            break
+
+        else:
+            print("\nInvalid choice. Please select a valid option.")
+
+if __name__ == "__main__":
+    menu()
+
+
+Assignment - 6
+pip install pycryptodome
+from Crypto.PublicKey import DSA
+from Crypto.Hash import SHA256
+from Crypto.Signature import DSS
+from Crypto.Random import get_random_bytes
+import binascii
+
+# Key Generation
+def generate_keys():
+    key = DSA.generate(2048)  # Generate a DSA key pair (2048-bit)
+    private_key = key.export_key()  # Export private key
+    public_key = key.publickey().export_key()  # Export public key
+    print("Keys generated successfully!")
+    return private_key, public_key
+
+# Signature Generation
+def generate_signature(private_key, message):
+    key = DSA.import_key(private_key)
+    signer = DSS.new(key, 'fips-186-3')  # 'fips-186-3' is the DSS standard used for signing
+    h = SHA256.new(message.encode())  # Hash the message using SHA-256
+    signature = signer.sign(h)
+    print(f"Signature generated successfully: {binascii.hexlify(signature).decode()}")
+    return signature
+
+# Signature Verification
+def verify_signature(public_key, message, signature):
+    key = DSA.import_key(public_key)
+    verifier = DSS.new(key, 'fips-186-3')
+    h = SHA256.new(message.encode())  # Hash the message using SHA-256
+    try:
+        verifier.verify(h, signature)  # Verify the signature
+        print("Signature is valid.")
+        return True
+    except ValueError:
+        print("Signature is invalid.")
+        return False
+
+# Menu-driven program
+def menu():
+    print("\n--- Digital Signature Scheme ---")
+    print("1. Generate Key Pair")
+    print("2. Sign a Message")
+    print("3. Verify a Signature")
+    print("4. Exit")
+
+    choice = input("Enter your choice (1-4): ")
+
+    private_key = None
+    public_key = None
+    signature = None
+    message = None
+
+    while choice != '4':
+        if choice == '1':
+            private_key, public_key = generate_keys()
+        elif choice == '2':
+            if private_key is None:
+                print("Please generate keys first (Option 1).")
+            else:
+                message = input("Enter the message to sign: ")
+                signature = generate_signature(private_key, message)
+        elif choice == '3':
+            if public_key is None:
+                print("Please generate keys first (Option 1).")
+            elif signature is None or message is None:
+                print("Please sign a message first (Option 2).")
+            else:
+                verify_signature(public_key, message, signature)
+        else:
+            print("Invalid choice. Please select a valid option.")
+
+        # Display the menu again
+        print("\n--- Digital Signature Scheme ---")
+        print("1. Generate Key Pair")
+        print("2. Sign a Message")
+        print("3. Verify a Signature")
+        print("4. Exit")
+        choice = input("Enter your choice (1-4): ")
+
+    print("Exiting the program.")
+
+# Main execution
+if __name__ == "__main__":
+    menu()
