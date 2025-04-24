@@ -299,19 +299,26 @@ if __name__ == "__main__":
     main()
 
 Assignment - 3
-!pip install pycryptodome
 from Crypto.Cipher import DES
 from Crypto.Util.Padding import pad, unpad
 import os
+import binascii
 
+# Generate DES key (64 bits = 8 bytes)
 def generate_des_key():
-    """Generates an 8-byte (64-bit) DES key."""
     return os.urandom(8)
 
+# Create input.txt with custom user content
+def create_input_file():
+    content = input("\nEnter the content to write into 'input.txt':\n> ")
+    with open("input.txt", "w") as f:
+        f.write(content)
+    print("File 'input.txt' created successfully.")
+
+# Encrypt file using DES CBC
 def encrypt_file(input_filename, output_filename, key):
-    """Encrypts a file using DES in CBC mode."""
     cipher = DES.new(key, DES.MODE_CBC)
-    iv = cipher.iv  # Get the initialization vector
+    iv = cipher.iv
 
     with open(input_filename, 'rb') as f:
         plaintext = f.read()
@@ -320,14 +327,17 @@ def encrypt_file(input_filename, output_filename, key):
     ciphertext = cipher.encrypt(padded_text)
 
     with open(output_filename, 'wb') as f:
-        f.write(iv + ciphertext)  # Store IV at the beginning of the file
+        f.write(iv + ciphertext)
 
-    print(f"Encryption complete. Encrypted file saved as '{output_filename}'")
+    print("\nEncryption complete.")
+    print(f"Encrypted file saved as '{output_filename}'.")
+    print("Encrypted data (hex view):")
+    print(binascii.hexlify(iv + ciphertext).decode())
 
+# Decrypt file using DES CBC
 def decrypt_file(input_filename, output_filename, key):
-    """Decrypts a DES-encrypted file."""
     with open(input_filename, 'rb') as f:
-        iv = f.read(8)  # Extract IV from the beginning
+        iv = f.read(8)
         ciphertext = f.read()
 
     cipher = DES.new(key, DES.MODE_CBC, iv)
@@ -336,64 +346,112 @@ def decrypt_file(input_filename, output_filename, key):
     with open(output_filename, 'wb') as f:
         f.write(decrypted_text)
 
-    print(f"Decryption complete. Decrypted file saved as '{output_filename}'")
+    print(f"\nDecryption complete. Decrypted file saved as '{output_filename}'.")
 
-# Example usage
+# Menu-driven interface
+def menu():
+    key = generate_des_key()  # One DES key for this session
+    while True:
+        print("\n--- DES File Encryption/Decryption ---")
+        print("1. Create 'input.txt' file with custom content")
+        print("2. Encrypt 'input.txt' to 'encrypted.bin'")
+        print("3. Decrypt 'encrypted.bin' to 'decrypted.txt'")
+        print("4. Exit")
+
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            create_input_file()
+        elif choice == '2':
+            encrypt_file("input.txt", "encrypted.bin", key)
+        elif choice == '3':
+            decrypt_file("encrypted.bin", "decrypted.txt", key)
+        elif choice == '4':
+            print("Exiting program.")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
 if __name__ == "__main__":
-    key = generate_des_key()  # Generate a random DES key
+    menu()
 
-    encrypt_file("input.txt", "encrypted.bin", key)
-    decrypt_file("encrypted.bin", "decrypted.txt", key)
-with open("encrypted.bin","rb") as f:
-  data = f.read(100)
-  print(data)
 
 Assignment - 4
-!pip install pycryptodome
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
+import binascii
 
-# AES block size is 16 bytes
+# AES block size
 BLOCK_SIZE = 16
 
+# Global AES key (for the session)
+key = get_random_bytes(16)
+
+def create_input_file():
+    content = input("\nEnter the content to write into 'input.txt':\n> ")
+    with open("input.txt", "w") as f:
+        f.write(content)
+    print("File 'input.txt' created successfully.")
+
 def encrypt_file(input_file, output_file, key):
-    iv = get_random_bytes(BLOCK_SIZE)  # Generate a random IV
-    cipher = AES.new(key, AES.MODE_CBC, iv)  # Create AES cipher
+    iv = get_random_bytes(BLOCK_SIZE)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
 
     with open(input_file, "rb") as f:
         plaintext = f.read()
 
-    padded_data = pad(plaintext, BLOCK_SIZE)  # Ensure multiple of 16 bytes
-    ciphertext = cipher.encrypt(padded_data)  # Encrypt data
+    padded_data = pad(plaintext, BLOCK_SIZE)
+    ciphertext = cipher.encrypt(padded_data)
 
     with open(output_file, "wb") as f:
-        f.write(iv + ciphertext)  # Store IV + encrypted data
+        f.write(iv + ciphertext)
 
-    print(f"Encryption complete. Encrypted file saved as '{output_file}'.")
+    # Show encrypted data as hex
+    print("\nEncryption complete.")
+    print(f"Encrypted file saved as '{output_file}'.")
+    print("Encrypted data (hex view):")
+    print(binascii.hexlify(iv + ciphertext).decode())
 
 def decrypt_file(input_file, output_file, key):
     with open(input_file, "rb") as f:
-        iv = f.read(BLOCK_SIZE)  # Extract IV
+        iv = f.read(BLOCK_SIZE)
         ciphertext = f.read()
 
-    cipher = AES.new(key, AES.MODE_CBC, iv)  # Create AES cipher
-    decrypted_data = unpad(cipher.decrypt(ciphertext), BLOCK_SIZE)  # Decrypt and remove padding
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    decrypted_data = unpad(cipher.decrypt(ciphertext), BLOCK_SIZE)
 
     with open(output_file, "wb") as f:
         f.write(decrypted_data)
 
-    print(f"Decryption complete. Decrypted file saved as '{output_file}'.")
+    print(f"\nDecryption complete. Decrypted file saved as '{output_file}'.")
 
-# Generate a 16-byte AES key (store securely!)
-key = get_random_bytes(16)
+def menu():
+    while True:
+        print("\n--- AES File Encryption/Decryption ---")
+        print("1. Create 'input.txt' file with custom content")
+        print("2. Encrypt 'input.txt' to 'encrypted_aes.bin'")
+        print("3. Decrypt 'encrypted_aes.bin' to 'decrypted_aes.txt'")
+        print("4. Exit")
 
-# Encrypt and Decrypt Example
-encrypt_file("input.txt", "encrypted_aes.bin", key)
-decrypt_file("encrypted_aes.bin", "decrypted_aes.txt", key)
-with open("encrypted_aes.bin","rb") as f:
-  data = f.read(100)
-  print(data)
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            create_input_file()
+        elif choice == '2':
+            encrypt_file("input.txt", "encrypted_aes.bin", key)
+        elif choice == '3':
+            decrypt_file("encrypted_aes.bin", "decrypted_aes.txt", key)
+        elif choice == '4':
+            print("Exiting program.")
+            break
+        else:
+            print("Invalid choice. Please select a valid option.")
+
+if __name__ == "__main__":
+    menu()
+
+
 
 Assignment - 5
 def power(base, expo, m):
@@ -407,94 +465,81 @@ def power(base, expo, m):
         expo = expo // 2
     return res
 
-# Function to find modular inverse of e modulo phi(n)
-# Here we are calculating phi(n) using Hit and Trial Method
-# but we can optimize it using Extended Euclidean Algorithm
 def modInverse(e, phi):
+    """Finds modular inverse of e modulo phi using brute-force."""
     for d in range(2, phi):
         if (e * d) % phi == 1:
             return d
     return -1
 
-# RSA Key Generation
-def generateKeys():
-    p = 7919  # Prime number 1
-    q = 1009  # Prime number 2
-
-    n = p * q
-    phi = (p - 1) * (q - 1)
-
-    # Choose e, where 1 < e < phi(n) and gcd(e, phi(n)) == 1
-    e = 0
-    for e in range(2, phi):
-        if gcd(e, phi) == 1:
-            break
-
-    # Compute d such that e * d ≡ 1 (mod phi(n))
-    d = modInverse(e, phi)
-
-    return e, d, n
-
-# Function to calculate gcd
 def gcd(a, b):
+    """Calculates the greatest common divisor."""
     while b != 0:
         a, b = b, a % b
     return a
 
-# Encrypt message using public key (e, n)
-def encrypt(m, e, n):
-    return power(m, e, n)
+def generateKeys():
+    """Generates RSA public and private keys."""
+    p = 7919
+    q = 1009
+    n = p * q
+    phi = (p - 1) * (q - 1)
 
-# Decrypt message using private key (d, n)
-def decrypt(c, d, n):
-    return power(c, d, n)
+    for e in range(2, phi):
+        if gcd(e, phi) == 1:
+            break
+
+    d = modInverse(e, phi)
+    return e, d, n
+
+# Helper functions to handle text <-> integer conversion
+def encrypt_message(message, e, n):
+    return [power(ord(char), e, n) for char in message]
+
+def decrypt_message(ciphertext, d, n):
+    return ''.join([chr(power(char, d, n)) for char in ciphertext])
 
 # Main menu-driven program
 def menu():
+    e, d, n = None, None, None
+    ciphertext = None
+    message = None
+
     while True:
         print("\nRSA Encryption/Decryption Menu")
         print("1. Generate RSA Keys")
-        print("2. Encrypt a Message")
+        print("2. Encrypt a Message (Text)")
         print("3. Decrypt a Message")
         print("4. Exit")
 
         choice = input("Enter your choice: ")
 
         if choice == '1':
-            # Key Generation
             e, d, n = generateKeys()
             print(f"\nPublic Key (e, n): ({e}, {n})")
             print(f"Private Key (d, n): ({d}, {n})")
 
         elif choice == '2':
-            # Encrypt a Message
-            try:
-                M = int(input("\nEnter the message to encrypt (as an integer): "))
-                e = int(input("Enter public key 'e': "))
-                n = int(input("Enter public key 'n': "))
-
-                C = encrypt(M, e, n)
-                print(f"\nEncrypted Message: {C}")
-            except ValueError:
-                print("\nInvalid input. Please enter integers for the message and keys.")
+            if e is None or n is None:
+                print("\nPlease generate keys first (Option 1).")
+                continue
+            message = input("\nEnter the message to encrypt: ")
+            ciphertext = encrypt_message(message, e, n)
+            print(f"\nEncrypted Message (as integers): {ciphertext}")
 
         elif choice == '3':
-            # Decrypt a Message
-            try:
-                C = int(input("\nEnter the encrypted message (ciphertext): "))
-                d = int(input("Enter private key 'd': "))
-                n = int(input("Enter private key 'n': "))
-
-                decrypted = decrypt(C, d, n)
-                print(f"\nDecrypted Message: {decrypted}")
-            except ValueError:
-                print("\nInvalid input. Please enter integers for the ciphertext and keys.")
+            if d is None or n is None:
+                print("\nPlease generate keys first (Option 1).")
+                continue
+            if ciphertext is None:
+                print("\nPlease encrypt a message first (Option 2).")
+                continue
+            decrypted = decrypt_message(ciphertext, d, n)
+            print(f"\nDecrypted Message: {decrypted}")
 
         elif choice == '4':
-            # Exit the program
             print("\nExiting the program...")
             break
-
         else:
             print("\nInvalid choice. Please select a valid option.")
 
